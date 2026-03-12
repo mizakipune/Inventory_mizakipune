@@ -33,6 +33,7 @@ menu = st.sidebar.selectbox(
         "Update Stock",
         "Record Sale",
         "Edit Sale",
+        "Edit Inventory",
         "Search Product",
         "Sales Report",
         "Download Reports"
@@ -352,7 +353,7 @@ elif menu == "Record Sale":
 
 # ---------------- EIDT SALE PRODUCT ------------------------------------------
 ####=============================================================================
-elif menu == "Edit Sale Record":
+elif menu == "Edit Sale":
 
     st.subheader("Edit Sale Record")
 
@@ -421,7 +422,7 @@ elif menu == "Edit Sale Record":
         st.success("Sale updated successfully")
 ############# Inventory Record ++++++++++++++++++++++++++++++++++++++++++++++++
 ####################################################################################
-elif menu == "Edit Inventory Record":
+elif menu == "Edit Inventory":
 
     st.subheader("Edit Inventory Record")
 
