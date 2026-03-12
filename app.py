@@ -351,7 +351,8 @@ elif menu == "Record Sale":
             st.success("✅ Sale Recorded Successfully")
 
 # ---------------- EIDT SALE PRODUCT ------------------------------------------
-elif menu == "Edit Sale":
+####=============================================================================
+elif menu == "Edit Sale Record":
 
     st.subheader("Edit Sale Record")
 
@@ -418,6 +419,81 @@ elif menu == "Edit Sale":
             sales.to_excel(writer,sheet_name="Sales",index=False)
 
         st.success("Sale updated successfully")
+############# Inventory Record ++++++++++++++++++++++++++++++++++++++++++++++++
+####################################################################################
+elif menu == "Edit Inventory Record":
+
+    st.subheader("Edit Inventory Record")
+
+    # Show sales table
+    st.dataframe(inventory)
+
+    # Select row
+    row_index = st.selectbox(
+        "Select Row to Edit",
+        inventory.index
+    )
+
+    selected_row = inventory.loc[row_index]
+
+    st.write("Selected Record")
+    st.write(selected_row)
+
+    # Editable fields
+    new_product = st.text_input(
+        "Product",
+        value=selected_row["Product"]
+    )
+
+    new_details = st.text_input(
+        "Details",
+        value=selected_row["Details"]
+    )
+
+    new_size = st.text_input(
+        "Size",
+        value=selected_row["Size"]
+    )
+
+    
+    new_clr = st.text_input(
+        "Colours",
+        value=str(selected_row["Colours"])
+    )
+
+    new_cost_price = st.text_input(
+        "Cost Price",
+        value=str(selected_row["Cost Price"])
+    )
+
+    new_sale_price = st.text_input(
+        "Sale Price",
+        value=str(selected_row["Sale Price"])
+    )
+
+    if st.button("Update inventory Record"):
+
+        try:
+            new_cost_price = float(new_cost_price)
+            new_sale_price = float(new_sale_price)
+        except:
+            st.error("Enter valid numbers")
+            st.stop()
+
+        # Update dataframe
+        inventory.loc[row_index,"Product"] = new_product
+        inventory.loc[row_index,"Details"] = new_details
+        inventory.loc[row_index,"Sizee"] = new_size
+        inventory.loc[row_index,"Colours"] = new_clr
+        inventory.loc[row_index,"Cost Price"] = new_cost_price
+        inventory.loc[row_index,"Sale Price"] = new_sale_price
+       
+        # Save Excel
+        with pd.ExcelWriter(file) as writer:
+            inventory.to_excel(writer,sheet_name="Inventory",index=False)
+            sales.to_excel(writer,sheet_name="Sales",index=False)
+
+        st.success("inventory updated successfully")
 
 # ---------------- SEARCH PRODUCT ----------------
 
