@@ -1,6 +1,10 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
+import gspread
+import pandas as pd
+from oauth2client.service_account import ServiceAccountCredentials
+
 if "product_checked" not in st.session_state:
     st.session_state.product_checked = False
 
@@ -9,10 +13,27 @@ st.set_page_config(
     layout="centered"
 )
 
-file = "inventory_mizaki.xlsx"
+# file = "inventory_mizaki.xlsx"
+# inventory = pd.read_excel(file, sheet_name="Inventory")
+# sales = pd.read_excel(file, sheet_name="Sales")
 
-inventory = pd.read_excel(file, sheet_name="Inventory")
-sales = pd.read_excel(file, sheet_name="Sales")
+scope = [
+"https://spreadsheets.google.com/feeds",
+"https://www.googleapis.com/auth/drive"
+]
+
+creds = ServiceAccountCredentials.from_json_keyfile_name(
+    "service_account.json", scope
+)
+
+client = gspread.authorize(creds)
+sheet = client.open("inventory_mizaki")
+
+inventory_sheet = sheet.worksheet("Inventory")
+sales_sheet = sheet.worksheet("Sales")
+
+inventory = pd.DataFrame(inventory_sheet.get_all_records())
+sales = pd.DataFrame(sales_sheet.get_all_records())
 
 text_columns = ["Product","Details","Size","Colours"]
 for col in text_columns:
@@ -47,7 +68,6 @@ if menu == "Dashboard":
     st.subheader("Inventory Dashboard")
 
     if not sales.empty:
-
         sold = sales.groupby(["Product","Colours"])["Quantity Sold"].sum().reset_index()
 
         summary = pd.merge(
@@ -58,11 +78,9 @@ if menu == "Dashboard":
         )
 
         summary["Quantity Sold"] = summary["Quantity Sold"].fillna(0)
-
         summary["Remaining"] = summary["Quantity"] - summary["Quantity Sold"]
 
     else:
-
         summary = inventory.copy()
         summary["Quantity Sold"] = 0
         summary["Remaining"] = summary["Quantity"]
@@ -70,7 +88,6 @@ if menu == "Dashboard":
     total_profit = sales["Profit"].sum() if not sales.empty else 0
 
     col1,col2 = st.columns(2)
-
     col1.metric("Total Products", len(inventory))
     col2.metric("Total Profit", int(total_profit))
 
@@ -118,9 +135,8 @@ elif menu == "Add Product":
 
             inventory = pd.concat([inventory,new_product],ignore_index=True)
 
-            with pd.ExcelWriter(file) as writer:
-                inventory.to_excel(writer,sheet_name="Inventory",index=False)
-                sales.to_excel(writer,sheet_name="Sales",index=False)
+            inventory_sheet.update([inventory.columns.values.tolist()] + inventory.values.tolist())
+            sales_sheet.update([sales.columns.values.tolist()] + sales.values.tolist())
 
             st.success("✅ Product Added Successfully")
 
@@ -177,9 +193,8 @@ elif menu == "Update Stock":
 
         inventory.loc[mask, "Quantity"] = inventory.loc[mask, "Quantity"] + qty
 
-        with pd.ExcelWriter(file) as writer:
-            inventory.to_excel(writer, sheet_name="Inventory", index=False)
-            sales.to_excel(writer, sheet_name="Sales", index=False)
+        inventory_sheet.update([inventory.columns.values.tolist()] + inventory.values.tolist())
+        sales_sheet.update([sales.columns.values.tolist()] + sales.values.tolist())
 
         st.success("Stock Updated Successfully")
 
@@ -345,9 +360,8 @@ elif menu == "Record Sale":
                 "Quantity"
             ] = remaining_qty
 
-            with pd.ExcelWriter(file) as writer:
-                inventory.to_excel(writer, sheet_name="Inventory", index=False)
-                sales.to_excel(writer, sheet_name="Sales", index=False)
+            inventory_sheet.update([inventory.columns.values.tolist()] + inventory.values.tolist())
+            sales_sheet.update([sales.columns.values.tolist()] + sales.values.tolist())
 
             st.success("✅ Sale Recorded Successfully")
 
@@ -415,9 +429,8 @@ elif menu == "Edit Sale":
         sales.loc[row_index,"Quantity"] = remaining_qty
 
         # Save Excel
-        with pd.ExcelWriter(file) as writer:
-            inventory.to_excel(writer,sheet_name="Inventory",index=False)
-            sales.to_excel(writer,sheet_name="Sales",index=False)
+        inventory_sheet.update([inventory.columns.values.tolist()] + inventory.values.tolist())
+        sales_sheet.update([sales.columns.values.tolist()] + sales.values.tolist())
 
         st.success("Sale updated successfully")
 ############# Inventory Record ++++++++++++++++++++++++++++++++++++++++++++++++
@@ -484,15 +497,14 @@ elif menu == "Edit Inventory":
         # Update dataframe
         inventory.loc[row_index,"Product"] = new_product
         inventory.loc[row_index,"Details"] = new_details
-        inventory.loc[row_index,"Sizee"] = new_size
+        inventory.loc[row_index,"Size"] = new_size
         inventory.loc[row_index,"Colours"] = new_clr
         inventory.loc[row_index,"Cost Price"] = new_cost_price
         inventory.loc[row_index,"Sale Price"] = new_sale_price
        
         # Save Excel
-        with pd.ExcelWriter(file) as writer:
-            inventory.to_excel(writer,sheet_name="Inventory",index=False)
-            sales.to_excel(writer,sheet_name="Sales",index=False)
+        inventory_sheet.update([inventory.columns.values.tolist()] + inventory.values.tolist())
+        sales_sheet.update([sales.columns.values.tolist()] + sales.values.tolist())
 
         st.success("inventory updated successfully")
 
