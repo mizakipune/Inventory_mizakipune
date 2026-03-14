@@ -22,13 +22,13 @@ scope = [
 "https://www.googleapis.com/auth/drive"
 ]
 
-
 creds = ServiceAccountCredentials.from_json_keyfile_dict(
     st.secrets["gcp_service_account"], scope
 )
 
 client = gspread.authorize(creds)
-sheet = client.open("inventory_mizaki")
+sheet = client.open_by_key("14d0tx3xeL94Fls_0S78DqfBRhPD_22Kz7_8s7X0ILK8")
+#sheet = client.open("inventory_mizaki")
 
 inventory_sheet = sheet.worksheet("Inventory")
 sales_sheet = sheet.worksheet("Sales")
