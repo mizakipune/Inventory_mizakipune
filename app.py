@@ -2,20 +2,16 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 import gspread
-import pandas as pd
 from oauth2client.service_account import ServiceAccountCredentials
 
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(page_title="Inventory App", layout="centered")
+
+# ---------------- SESSION STATE ----------------
 if "product_checked" not in st.session_state:
     st.session_state.product_checked = False
 
-st.set_page_config(
-    page_title="Inventory App",
-    layout="centered"
-)
-
-# file = "inventory_mizaki.xlsx"
-# inventory = pd.read_excel(file, sheet_name="Inventory")
-# sales = pd.read_excel(file, sheet_name="Sales")
+# ---------------- GOOGLE SHEETS CONNECTION ----------------
 
 scope = [
 "https://spreadsheets.google.com/feeds",
@@ -27,23 +23,47 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(
 )
 
 client = gspread.authorize(creds)
+
 sheet = client.open_by_key("14d0tx3xeL94Fls_0S78DqfBRhPD_22Kz7_8s7X0ILK8")
-#sheet = client.open("inventory_mizaki")
 
 inventory_sheet = sheet.worksheet("Inventory")
 sales_sheet = sheet.worksheet("Sales")
 
+# ---------------- LOAD DATA ----------------
+
 inventory = pd.DataFrame(inventory_sheet.get_all_records())
 sales = pd.DataFrame(sales_sheet.get_all_records())
 
-text_columns = ["Product","Details","Size","Colours"]
-for col in text_columns:
-    inventory[col] = inventory[col].astype(str)
-inventory["Cost Price"] = pd.to_numeric(inventory["Cost Price"], errors="coerce")
-inventory["Sale Price"] = pd.to_numeric(inventory["Sale Price"], errors="coerce")
-inventory["Quantity"] = pd.to_numeric(inventory["Quantity"], errors="coerce")
+# ---------------- DATA CLEANING ----------------
 
-st.set_page_config(page_title="Inventory App", layout="wide")
+text_columns = ["Product","Details","Size","Colours"]
+
+for col in text_columns:
+    if col in inventory.columns:
+        inventory[col] = inventory[col].astype(str)
+
+numeric_columns = ["Cost Price","Sale Price","Quantity"]
+
+for col in numeric_columns:
+    if col in inventory.columns:
+        inventory[col] = pd.to_numeric(inventory[col], errors="coerce")
+
+# ---------------- SAVE FUNCTION ----------------
+
+def save_to_google():
+
+    inventory_clean = inventory.fillna("").astype(str)
+    sales_clean = sales.fillna("").astype(str)
+
+    inventory_sheet.update(
+        [inventory_clean.columns.tolist()] + inventory_clean.values.tolist()
+    )
+
+    sales_sheet.update(
+        [sales_clean.columns.tolist()] + sales_clean.values.tolist()
+    )
+
+# ---------------- UI ----------------
 
 st.title("📦 Inventory Management System")
 
@@ -69,6 +89,7 @@ if menu == "Dashboard":
     st.subheader("Inventory Dashboard")
 
     if not sales.empty:
+
         sold = sales.groupby(["Product","Colours"])["Quantity Sold"].sum().reset_index()
 
         summary = pd.merge(
@@ -82,6 +103,7 @@ if menu == "Dashboard":
         summary["Remaining"] = summary["Quantity"] - summary["Quantity Sold"]
 
     else:
+
         summary = inventory.copy()
         summary["Quantity Sold"] = 0
         summary["Remaining"] = summary["Quantity"]
@@ -89,6 +111,7 @@ if menu == "Dashboard":
     total_profit = sales["Profit"].sum() if not sales.empty else 0
 
     col1,col2 = st.columns(2)
+
     col1.metric("Total Products", len(inventory))
     col2.metric("Total Profit", int(total_profit))
 
@@ -104,12 +127,13 @@ elif menu == "Add Product":
     details = st.text_input("Details")
     size = st.text_input("Size")
     colour = st.text_input("Colour")
-    cost = st.text_input("Cost Price")
-    sp = st.text_input("Sale Price")
-    qty = st.text_input("Quantity")
+
+    cost = st.number_input("Cost Price", min_value=0.0)
+    sp = st.number_input("Sale Price", min_value=0.0)
+    qty = st.number_input("Quantity", min_value=0)
 
     if st.button("Add Product"):
-        # Check if product already exists
+
         mask = (
             (inventory["Product"] == product) &
             (inventory["Details"] == details) &
@@ -118,9 +142,11 @@ elif menu == "Add Product":
         )
 
         if inventory[mask].shape[0] > 0:
-            st.warning("⚠ Product already available. Please update stock instead.")
+
+            st.warning("⚠ Product already exists. Use Update Stock.")
 
         else:
+
             new_product = pd.DataFrame({
 
                 "Date":[date.today()],
@@ -128,16 +154,15 @@ elif menu == "Add Product":
                 "Details":[details],
                 "Size":[size],
                 "Colours":[colour],
-                "Quantity":[int(qty)],
-                "Cost Price":[float(cost)],
-                "Sale Price":[float(sp)]
+                "Quantity":[qty],
+                "Cost Price":[cost],
+                "Sale Price":[sp]
 
             })
 
-            inventory = pd.concat([inventory,new_product],ignore_index=True)
+            inventory.loc[len(inventory)] = new_product.iloc[0]
 
-            inventory_sheet.update([inventory.columns.values.tolist()] + inventory.values.tolist())
-            sales_sheet.update([sales.columns.values.tolist()] + sales.values.tolist())
+            save_to_google()
 
             st.success("✅ Product Added Successfully")
 
@@ -147,43 +172,23 @@ elif menu == "Update Stock":
 
     st.subheader("Update Stock")
 
-    product = st.selectbox(
-        "Product",
-        sorted(inventory["Product"].unique()),
-        key="sale_product"
-    )
+    product = st.selectbox("Product", sorted(inventory["Product"].unique()))
 
     product_df = inventory[inventory["Product"] == product]
 
-    # -------- DETAILS (filtered by product) --------
-    details = st.selectbox(
-        "Details",
-        sorted(product_df["Details"].unique()),
-        key="sale_details"
-    )
+    details = st.selectbox("Details", sorted(product_df["Details"].unique()))
 
     details_df = product_df[product_df["Details"] == details]
 
-    # -------- SIZE (filtered by product + details) --------
-    size = st.selectbox(
-        "Size",
-        sorted(details_df["Size"].unique()),
-        key="sale_size"
-    )
+    size = st.selectbox("Size", sorted(details_df["Size"].unique()))
 
     size_df = details_df[details_df["Size"] == size]
 
-    # -------- COLOUR (filtered by product + details + size) --------
-    colour = st.selectbox(
-        "Colour",
-        sorted(size_df["Colours"].unique()),
-        key="sale_colour"
-    )
+    colour = st.selectbox("Colour", sorted(size_df["Colours"].unique()))
 
-    qty_input = st.text_input("Enter Quantity")
+    qty = st.number_input("Enter Quantity", min_value=1)
 
     if st.button("Update Stock"):
-        qty = int(qty_input)
 
         mask = (
             (inventory["Product"] == product) &
@@ -192,10 +197,9 @@ elif menu == "Update Stock":
             (inventory["Colours"] == colour)
         )
 
-        inventory.loc[mask, "Quantity"] = inventory.loc[mask, "Quantity"] + qty
+        inventory.loc[mask,"Quantity"] += qty
 
-        inventory_sheet.update([inventory.columns.values.tolist()] + inventory.values.tolist())
-        sales_sheet.update([sales.columns.values.tolist()] + sales.values.tolist())
+        save_to_google()
 
         st.success("Stock Updated Successfully")
 
@@ -203,324 +207,90 @@ elif menu == "Update Stock":
 
 elif menu == "Record Sale":
 
-    product = st.selectbox(
-        "Product",
-        sorted(inventory["Product"].unique()),
-        key="sale_product"
-    )
+    st.subheader("Record Sale")
+
+    product = st.selectbox("Product", sorted(inventory["Product"].unique()))
 
     product_df = inventory[inventory["Product"] == product]
 
-    # -------- DETAILS (filtered by product) --------
-    details = st.selectbox(
-        "Details",
-        sorted(product_df["Details"].unique()),
-        key="sale_details"
-    )
+    details = st.selectbox("Details", sorted(product_df["Details"].unique()))
 
     details_df = product_df[product_df["Details"] == details]
 
-    # -------- SIZE (filtered by product + details) --------
-    size = st.selectbox(
-        "Size",
-        sorted(details_df["Size"].unique()),
-        key="sale_size"
-    )
+    size = st.selectbox("Size", sorted(details_df["Size"].unique()))
 
     size_df = details_df[details_df["Size"] == size]
 
-    # -------- COLOUR (filtered by product + details + size) --------
-    colour = st.selectbox(
-        "Colour",
-        sorted(size_df["Colours"].unique()),
-        key="sale_colour"
-    )
+    colour = st.selectbox("Colour", sorted(size_df["Colours"].unique()))
 
-    qty_input = st.text_input("Enter Quantity For Sale")
-
-    # ---------------- CHECK PRODUCT ----------------
+    qty = st.number_input("Enter Quantity For Sale", min_value=1)
 
     if st.button("Check Product"):
 
         product_data = size_df[size_df["Colours"] == colour]
 
         if product_data.empty:
-            st.error("❌ Product not found in inventory")
-            st.session_state.product_checked = False
-
+            st.error("Product not found")
         else:
 
             cost = float(product_data["Cost Price"].values[0])
             sp = float(product_data["Sale Price"].values[0])
-            stock_qty = int(product_data["Quantity"].values[0])
+            stock = int(product_data["Quantity"].values[0])
 
-            st.session_state.product_checked = True
-            st.session_state.cost = cost
-            st.session_state.sp = sp
-            st.session_state.stock = stock_qty
+            st.metric("Available Stock", stock)
+            st.metric("Cost Price", cost)
+            st.metric("Sale Price", sp)
 
-            st.success("✅ Product Found")
+# ---------------- EDIT SALE ----------------
 
-            col1, col2, col3 = st.columns(3)
-
-            col1.metric("Available Stock", stock_qty)
-            col2.metric("Cost Price", cost)
-            col3.metric("Sale Price", sp)
-
-            # -------- CHECK QUANTITY --------
-
-            if qty_input:
-                try:
-                    qty = int(qty_input)
-
-                    if qty > stock_qty:
-                        st.error(f"❌ Entered quantity not available. Only {stock_qty} items in stock.")
-                    else:
-                        st.success("✅ Quantity available for sale")
-
-                except:
-                    st.error("Enter valid numeric quantity")
-
-    # ---------------- ENTER SALE PRICE ----------------
-
-    if st.session_state.get("product_checked", False):
-
-        customer_name = st.text_input("Enter Customer Name")
-        real_sale_input = st.text_input("Enter Real Sale Price")
-
-        if st.button("Save Sale"):
-
-            if not qty_input:
-                st.error("Enter quantity")
-                st.stop()
-
-            try:
-                qty = int(qty_input)
-            except:
-                st.error("Quantity must be number")
-                st.stop()
-
-            if qty > st.session_state.stock:
-                st.error(f"❌ Only {st.session_state.stock} items available in stock")
-                st.stop()
-
-            if not real_sale_input:
-                st.error("Enter real sale price")
-                st.stop()
-
-            try:
-                real_sale = float(real_sale_input)
-            except:
-                st.error("Invalid sale price")
-                st.stop()
-
-            if not customer_name:
-                st.error("Enter customer name")
-                st.stop()
-
-            cost = float(st.session_state.cost)
-            sp1 = float(st.session_state.sp)
-
-            previous_qty = int(st.session_state.stock)
-            remaining_qty = previous_qty - qty
-
-            profit_per_item = real_sale - cost
-            profit = profit_per_item * qty
-
-            total_costprice = cost * qty
-            total_saleprice = real_sale * qty
-
-            new_sale = pd.DataFrame({
-
-                "Date":[date.today()],
-                "Customer Name":[customer_name],
-                "Product":[product],
-                "Details":[details],
-                "Size":[size],
-                "Colours":[colour],
-                "Previous Quantity":[previous_qty],
-                "Quantity Sold":[qty],
-                "Cost Price":[cost],
-                "Sale Price":[sp1],
-                "Quantity":[remaining_qty],
-                "Real Sale Price":[real_sale],
-                "Total Cost Price":[total_costprice],
-                "Total Sale Price":[total_saleprice],
-                "Profit":[profit]
-
-            })
-
-            sales = pd.concat([sales,new_sale],ignore_index=True)
-
-            # Update inventory
-            inventory.loc[
-                (inventory["Product"] == product) &
-                (inventory["Details"] == details) &
-                (inventory["Size"] == size) &
-                (inventory["Colours"] == colour),
-                "Quantity"
-            ] = remaining_qty
-
-            inventory_sheet.update([inventory.columns.values.tolist()] + inventory.values.tolist())
-            sales_sheet.update([sales.columns.values.tolist()] + sales.values.tolist())
-
-            st.success("✅ Sale Recorded Successfully")
-
-# ---------------- EIDT SALE PRODUCT ------------------------------------------
-####=============================================================================
 elif menu == "Edit Sale":
 
-    st.subheader("Edit Sale Record")
+    st.subheader("Edit Sale")
 
-    # Show sales table
     st.dataframe(sales)
 
-    # Select row
-    row_index = st.selectbox(
-        "Select Row to Edit",
-        sales.index
-    )
+    row = st.selectbox("Select Row", sales.index)
 
-    selected_row = sales.loc[row_index]
+    new_customer = st.text_input("Customer", sales.loc[row,"Customer Name"])
 
-    st.write("Selected Record")
-    st.write(selected_row)
+    if st.button("Update"):
 
-    # Editable fields
-    new_customer = st.text_input(
-        "Customer Name",
-        value=selected_row["Customer Name"]
-    )
+        sales.loc[row,"Customer Name"] = new_customer
 
-    new_qty = st.text_input(
-        "Quantity Sold",
-        value=str(selected_row["Quantity Sold"])
-    )
+        save_to_google()
 
-    new_sale_price = st.text_input(
-        "Real Sale Price",
-        value=str(selected_row["Real Sale Price"])
-    )
+        st.success("Sale Updated")
 
-    if st.button("Update Sale Record"):
+# ---------------- EDIT INVENTORY ----------------
 
-        try:
-            new_qty = int(new_qty)
-            new_sale_price = float(new_sale_price)
-        except:
-            st.error("Enter valid numbers")
-            st.stop()
-
-        cost = float(selected_row["Cost Price"])
-
-        previous_qty = int(selected_row["Previous Quantity"])
-        remaining_qty = previous_qty - new_qty
-
-        total_cost = cost * new_qty
-        total_sale = new_sale_price * new_qty
-        new_profit = (new_sale_price - cost) * new_qty
-
-        # Update dataframe
-        sales.loc[row_index,"Customer Name"] = new_customer
-        sales.loc[row_index,"Quantity Sold"] = new_qty
-        sales.loc[row_index,"Real Sale Price"] = new_sale_price
-        sales.loc[row_index,"Total Cost Price"] = total_cost
-        sales.loc[row_index,"Total Sale Price"] = total_sale
-        sales.loc[row_index,"Profit"] = new_profit
-        sales.loc[row_index,"Quantity"] = remaining_qty
-
-        # Save Excel
-        inventory_sheet.update([inventory.columns.values.tolist()] + inventory.values.tolist())
-        sales_sheet.update([sales.columns.values.tolist()] + sales.values.tolist())
-
-        st.success("Sale updated successfully")
-############# Inventory Record ++++++++++++++++++++++++++++++++++++++++++++++++
-####################################################################################
 elif menu == "Edit Inventory":
 
-    st.subheader("Edit Inventory Record")
+    st.subheader("Edit Inventory")
 
-    # Show sales table
     st.dataframe(inventory)
 
-    # Select row
-    row_index = st.selectbox(
-        "Select Row to Edit",
-        inventory.index
-    )
+    row = st.selectbox("Select Row", inventory.index)
 
-    selected_row = inventory.loc[row_index]
+    new_product = st.text_input("Product", inventory.loc[row,"Product"])
 
-    st.write("Selected Record")
-    st.write(selected_row)
+    if st.button("Update Inventory"):
 
-    # Editable fields
-    new_product = st.text_input(
-        "Product",
-        value=selected_row["Product"]
-    )
+        inventory.loc[row,"Product"] = new_product
 
-    new_details = st.text_input(
-        "Details",
-        value=selected_row["Details"]
-    )
+        save_to_google()
 
-    new_size = st.text_input(
-        "Size",
-        value=selected_row["Size"]
-    )
-
-    
-    new_clr = st.text_input(
-        "Colours",
-        value=str(selected_row["Colours"])
-    )
-
-    new_cost_price = st.text_input(
-        "Cost Price",
-        value=str(selected_row["Cost Price"])
-    )
-
-    new_sale_price = st.text_input(
-        "Sale Price",
-        value=str(selected_row["Sale Price"])
-    )
-
-    if st.button("Update inventory Record"):
-
-        try:
-            new_cost_price = float(new_cost_price)
-            new_sale_price = float(new_sale_price)
-        except:
-            st.error("Enter valid numbers")
-            st.stop()
-
-        # Update dataframe
-        inventory.loc[row_index,"Product"] = new_product
-        inventory.loc[row_index,"Details"] = new_details
-        inventory.loc[row_index,"Size"] = new_size
-        inventory.loc[row_index,"Colours"] = new_clr
-        inventory.loc[row_index,"Cost Price"] = new_cost_price
-        inventory.loc[row_index,"Sale Price"] = new_sale_price
-       
-        # Save Excel
-        inventory_sheet.update([inventory.columns.values.tolist()] + inventory.values.tolist())
-        sales_sheet.update([sales.columns.values.tolist()] + sales.values.tolist())
-
-        st.success("inventory updated successfully")
+        st.success("Inventory Updated")
 
 # ---------------- SEARCH PRODUCT ----------------
 
 elif menu == "Search Product":
 
-    st.subheader("Search Product")
-
-    search = st.text_input("Enter Product Name")
+    search = st.text_input("Search Product")
 
     if search:
 
         result = inventory[
-            inventory["Product"].str.contains(search,case=False)
+            inventory["Product"].str.contains(search, case=False)
         ]
 
         st.dataframe(result)
@@ -528,8 +298,6 @@ elif menu == "Search Product":
 # ---------------- SALES REPORT ----------------
 
 elif menu == "Sales Report":
-
-    st.subheader("Datewise Sales Report")
 
     if not sales.empty:
 
@@ -551,15 +319,12 @@ elif menu == "Sales Report":
 
 elif menu == "Download Reports":
 
-    st.subheader("Download Reports")
-
     inv_csv = inventory.to_csv(index=False).encode("utf-8")
 
     st.download_button(
         "Download Inventory Report",
         inv_csv,
-        "inventory_report.csv",
-        "text/csv"
+        "inventory_report.csv"
     )
 
     sales_csv = sales.to_csv(index=False).encode("utf-8")
@@ -567,6 +332,5 @@ elif menu == "Download Reports":
     st.download_button(
         "Download Sales Report",
         sales_csv,
-        "sales_report.csv",
-        "text/csv"
+        "sales_report.csv"
     )
