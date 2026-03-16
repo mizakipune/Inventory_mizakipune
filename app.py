@@ -236,11 +236,34 @@ elif menu == "Record Sale":
 
     st.subheader("Record Sale")
 
-    sku = st.selectbox("Select SKU", inventory["SKU"])
+    product = st.selectbox(
+        "Product",
+        sorted(inventory["Product"].unique())
+    )
 
-    product_row = inventory[inventory["SKU"]==sku].iloc[0]
+    product_df = inventory[inventory["Product"] == product]
 
-    st.write(product_row[["Product","Details","Size","Colours"]])
+    # DETAILS
+    details = st.selectbox(
+        "Details",
+        sorted(product_df["Details"].unique())
+    )
+
+    details_df = product_df[product_df["Details"] == details]
+
+    # SIZE
+    size = st.selectbox(
+        "Size",
+        sorted(details_df["Size"].unique())
+    )
+
+    size_df = details_df[details_df["Size"] == size]
+
+    # COLOUR
+    colour = st.selectbox(
+        "Colour",
+        sorted(size_df["Colours"].unique())
+    )
 
     qty = st.number_input("Quantity Sold", min_value=1)
 
@@ -250,13 +273,23 @@ elif menu == "Record Sale":
 
     if st.button("Save Sale"):
 
-        stock = int(product_row["Quantity"])
+        product_row = size_df[size_df["Colours"] == colour]
 
-        if qty > stock:
-            st.error("Not enough stock")
+        if product_row.empty:
+
+            st.error("Product not found")
             st.stop()
 
-        cost = float(product_row["Cost Price"])
+        sku = product_row["SKU"].values[0]
+
+        cost = float(product_row["Cost Price"].values[0])
+
+        stock = int(product_row["Quantity"].values[0])
+
+        if qty > stock:
+
+            st.error(f"Only {stock} items available")
+            st.stop()
 
         remaining = stock - qty
 
@@ -267,7 +300,7 @@ elif menu == "Record Sale":
             "Date":[date.today()],
             "Customer Name":[customer],
             "SKU":[sku],
-            "Product":[product_row["Product"]],
+            "Product":[product],
             "Quantity Sold":[qty],
             "Cost Price":[cost],
             "Real Sale Price":[real_sale],
@@ -277,11 +310,13 @@ elif menu == "Record Sale":
 
         sales = pd.concat([sales,new_sale],ignore_index=True)
 
-        inventory.loc[inventory["SKU"]==sku,"Quantity"] = remaining
+        inventory.loc[inventory["SKU"] == sku,"Quantity"] = remaining
 
         save_to_google()
 
-        st.success("Sale Recorded")
+        st.success("Sale Recorded Successfully")
+
+        st.info(f"SKU used: {sku}")
 
 # ---------------- EDIT SALE ----------------
 
