@@ -409,34 +409,39 @@ elif menu == "Sales Report":
         st.warning("No sales data available")
         st.stop()
 
-    # Convert to datetime safely
+    # Clean and convert date column
+    sales["Date"] = sales["Date"].astype(str).str.strip()
     sales["Date"] = pd.to_datetime(sales["Date"], errors="coerce")
 
     # Remove invalid dates
     sales = sales.dropna(subset=["Date"])
 
-    # Remove time part
+    # Convert to only date (remove time)
     sales["Date"] = sales["Date"].dt.date
 
+    # User input
     start = st.date_input("Start Date")
     end = st.date_input("End Date")
 
+    # Convert inputs to date
+    start_date = pd.to_datetime(start).date()
+    end_date = pd.to_datetime(end).date()
+
+    # Filter data
     report = sales[
-        (sales["Date"] >= start) &
-        (sales["Date"] <= end)
+        (sales["Date"] >= start_date) &
+        (sales["Date"] <= end_date)
     ]
 
     if report.empty:
         st.info("No sales found for selected dates")
     else:
-
         st.dataframe(report)
 
         total_profit = report["Profit"].sum()
         total_sales = report["Total Sale Price"].sum()
 
         col1, col2 = st.columns(2)
-
         col1.metric("Total Profit", int(total_profit))
         col2.metric("Total Sales", int(total_sales))
 # ---------------- DOWNLOAD REPORT ----------------
