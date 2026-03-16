@@ -243,7 +243,6 @@ elif menu == "Record Sale":
 
     product_df = inventory[inventory["Product"] == product]
 
-    # DETAILS
     details = st.selectbox(
         "Details",
         sorted(product_df["Details"].unique())
@@ -251,7 +250,6 @@ elif menu == "Record Sale":
 
     details_df = product_df[product_df["Details"] == details]
 
-    # SIZE
     size = st.selectbox(
         "Size",
         sorted(details_df["Size"].unique())
@@ -259,7 +257,6 @@ elif menu == "Record Sale":
 
     size_df = details_df[details_df["Size"] == size]
 
-    # COLOUR
     colour = st.selectbox(
         "Colour",
         sorted(size_df["Colours"].unique())
@@ -276,47 +273,71 @@ elif menu == "Record Sale":
         product_row = size_df[size_df["Colours"] == colour]
 
         if product_row.empty:
-
             st.error("Product not found")
             st.stop()
 
+        # -------- GET DATA FROM INVENTORY --------
+
         sku = product_row["SKU"].values[0]
-
         cost = float(product_row["Cost Price"].values[0])
-
+        sale_price = float(product_row["Sale Price"].values[0])
         stock = int(product_row["Quantity"].values[0])
 
         if qty > stock:
-
             st.error(f"Only {stock} items available")
             st.stop()
 
-        remaining = stock - qty
+        # -------- CALCULATIONS --------
 
-        profit = (real_sale - cost) * qty
+        previous_qty = stock
+        remaining_qty = stock - qty
+
+        total_cost_price = cost * qty
+        total_sale_price = real_sale * qty
+
+        profit = total_sale_price - total_cost_price
+
+        # -------- CREATE SALES ROW --------
 
         new_sale = pd.DataFrame({
 
-            "Date":[date.today()],
-            "Customer Name":[customer],
             "SKU":[sku],
+            "Date":[date.today()],
             "Product":[product],
-            "Quantity Sold":[qty],
+            "Details":[details],
+            "Size":[size],
+            "Quantity":[remaining_qty],
+            "Colours":[colour],
             "Cost Price":[cost],
+            "Sale Price":[sale_price],
+            "Quantity Sold":[qty],
+            "Profit":[profit],
             "Real Sale Price":[real_sale],
-            "Profit":[profit]
+            "Customer Name":[customer],
+            "Previous Quantity":[previous_qty],
+            "Total Cost Price":[total_cost_price],
+            "Total Sale Price":[total_sale_price]
 
         })
 
+        # -------- SAVE --------
+
         sales = pd.concat([sales,new_sale],ignore_index=True)
 
-        inventory.loc[inventory["SKU"] == sku,"Quantity"] = remaining
+        inventory.loc[inventory["SKU"] == sku,"Quantity"] = remaining_qty
 
         save_to_google()
 
         st.success("Sale Recorded Successfully")
 
-        st.info(f"SKU used: {sku}")
+        st.write("### Sale Summary")
+
+        st.write("Previous Quantity:", previous_qty)
+        st.write("Sold Quantity:", qty)
+        st.write("Remaining Stock:", remaining_qty)
+        st.write("Total Cost Price:", total_cost_price)
+        st.write("Total Sale Price:", total_sale_price)
+        st.write("Profit:", profit)
 
 # ---------------- EDIT SALE ----------------
 
