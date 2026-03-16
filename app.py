@@ -409,21 +409,17 @@ elif menu == "Sales Report":
         st.warning("No sales data available")
         st.stop()
 
-    # SAFE DATE CONVERSION
-    sales["Date"] = pd.to_datetime(
-        sales["Date"],
-        errors="coerce",
-        dayfirst=True
-    )
+    # Convert to datetime safely
+    sales["Date"] = pd.to_datetime(sales["Date"], errors="coerce")
 
     # Remove invalid dates
     sales = sales.dropna(subset=["Date"])
 
+    # Remove time part
+    sales["Date"] = sales["Date"].dt.date
+
     start = st.date_input("Start Date")
     end = st.date_input("End Date")
-
-    start = pd.to_datetime(start)
-    end = pd.to_datetime(end)
 
     report = sales[
         (sales["Date"] >= start) &
