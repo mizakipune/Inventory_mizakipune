@@ -214,21 +214,26 @@ elif menu == "Update Stock":
 
     if st.button("Update Stock"):
 
-        product_row = size_df[size_df["Colours"] == colour]
+        mask = (
+            (inventory["Product"] == product) &
+            (inventory["Details"] == details) &
+            (inventory["Size"] == size) &
+            (inventory["Colours"] == colour)
+        )
 
-        if product_row.empty:
+        if inventory[mask].empty:
 
             st.error("Product not found")
 
         else:
 
-            sku = product_row["SKU"].values[0]
-
-            inventory.loc[inventory["SKU"] == sku, "Quantity"] += qty
+            inventory.loc[mask, "Quantity"] = (
+                inventory.loc[mask, "Quantity"] + qty
+            )
 
             save_to_google()
 
-            st.success(f"Stock Updated for SKU {sku}")
+            st.success("Stock Updated Successfully")
 
 # ---------------- RECORD SALE ----------------
 
