@@ -409,39 +409,36 @@ elif menu == "Sales Report":
         st.warning("No sales data available")
         st.stop()
 
-    # Clean and convert date column
-    sales["Date"] = sales["Date"].astype(str).str.strip()
-    sales["Date"] = pd.to_datetime(sales["Date"], errors="coerce")
+    # Create a clean date column
+    sales["Date_clean"] = pd.to_datetime(
+        sales["Date"],
+        errors="coerce"
+    ).dt.strftime("%Y-%m-%d")
 
-    # Remove invalid dates
-    sales = sales.dropna(subset=["Date"])
-
-    # Convert to only date (remove time)
-    sales["Date"] = sales["Date"].dt.date
-
-    # User input
+    # Convert user input to same format
     start = st.date_input("Start Date")
     end = st.date_input("End Date")
 
-    # Convert inputs to date
-    start_date = pd.to_datetime(start).date()
-    end_date = pd.to_datetime(end).date()
+    start_date = pd.to_datetime(start).strftime("%Y-%m-%d")
+    end_date = pd.to_datetime(end).strftime("%Y-%m-%d")
 
-    # Filter data
+    # Filter using clean column
     report = sales[
-        (sales["Date"] >= start_date) &
-        (sales["Date"] <= end_date)
+        (sales["Date_clean"] >= start_date) &
+        (sales["Date_clean"] <= end_date)
     ]
 
     if report.empty:
         st.info("No sales found for selected dates")
     else:
+
         st.dataframe(report)
 
-        total_profit = report["Profit"].sum()
-        total_sales = report["Total Sale Price"].sum()
+        total_profit = pd.to_numeric(report["Profit"], errors="coerce").sum()
+        total_sales = pd.to_numeric(report["Total Sale Price"], errors="coerce").sum()
 
         col1, col2 = st.columns(2)
+
         col1.metric("Total Profit", int(total_profit))
         col2.metric("Total Sales", int(total_sales))
 # ---------------- DOWNLOAD REPORT ----------------
