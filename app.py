@@ -7,11 +7,9 @@ from oauth2client.service_account import ServiceAccountCredentials
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="Inventory App", layout="centered")
 
-# ---------------- SESSION STATE ----------------
-if "product_checked" not in st.session_state:
-    st.session_state.product_checked = False
+st.title("📦 Inventory Management System")
 
-# ---------------- GOOGLE SHEETS CONNECTION ----------------
+# ---------------- GOOGLE CONNECTION ----------------
 
 scope = [
 "https://spreadsheets.google.com/feeds",
@@ -34,9 +32,9 @@ sales_sheet = sheet.worksheet("Sales")
 inventory = pd.DataFrame(inventory_sheet.get_all_records())
 sales = pd.DataFrame(sales_sheet.get_all_records())
 
-# ---------------- DATA CLEANING ----------------
+# ---------------- DATA CLEAN ----------------
 
-text_columns = ["Product","Details","Size","Colours"]
+text_columns = ["SKU","Product","Details","Size","Colours"]
 
 for col in text_columns:
     if col in inventory.columns:
@@ -63,9 +61,20 @@ def save_to_google():
         [sales_clean.columns.tolist()] + sales_clean.values.tolist()
     )
 
-# ---------------- UI ----------------
+# ---------------- SKU GENERATOR ----------------
 
-st.title("📦 Inventory Management System")
+def generate_sku():
+
+    if inventory.empty:
+        return "SKU001"
+
+    last = inventory["SKU"].str.replace("SKU","").astype(int).max()
+
+    new = last + 1
+
+    return f"SKU{str(new).zfill(3)}"
+
+# ---------------- MENU ----------------
 
 menu = st.sidebar.selectbox(
     "Menu",
@@ -90,12 +99,12 @@ if menu == "Dashboard":
 
     if not sales.empty:
 
-        sold = sales.groupby(["Product","Colours"])["Quantity Sold"].sum().reset_index()
+        sold = sales.groupby("SKU")["Quantity Sold"].sum().reset_index()
 
         summary = pd.merge(
             inventory,
             sold,
-            on=["Product","Colours"],
+            on="SKU",
             how="left"
         )
 
@@ -121,7 +130,7 @@ if menu == "Dashboard":
 
 elif menu == "Add Product":
 
-    st.subheader("Add New Product")
+    st.subheader("Add Product")
 
     product = st.text_input("Product")
     details = st.text_input("Details")
@@ -147,8 +156,11 @@ elif menu == "Add Product":
 
         else:
 
+            sku = generate_sku()
+
             new_product = pd.DataFrame({
 
+                "SKU":[sku],
                 "Date":[date.today()],
                 "Product":[product],
                 "Details":[details],
@@ -160,11 +172,11 @@ elif menu == "Add Product":
 
             })
 
-            inventory.loc[len(inventory)] = new_product.iloc[0]
+            inventory = pd.concat([inventory,new_product],ignore_index=True)
 
             save_to_google()
 
-            st.success("✅ Product Added Successfully")
+            st.success(f"✅ Product Added (SKU: {sku})")
 
 # ---------------- UPDATE STOCK ----------------
 
@@ -172,36 +184,17 @@ elif menu == "Update Stock":
 
     st.subheader("Update Stock")
 
-    product = st.selectbox("Product", sorted(inventory["Product"].unique()))
+    sku = st.selectbox("Select SKU", inventory["SKU"])
 
-    product_df = inventory[inventory["Product"] == product]
+    qty = st.number_input("Add Quantity", min_value=1)
 
-    details = st.selectbox("Details", sorted(product_df["Details"].unique()))
+    if st.button("Update"):
 
-    details_df = product_df[product_df["Details"] == details]
-
-    size = st.selectbox("Size", sorted(details_df["Size"].unique()))
-
-    size_df = details_df[details_df["Size"] == size]
-
-    colour = st.selectbox("Colour", sorted(size_df["Colours"].unique()))
-
-    qty = st.number_input("Enter Quantity", min_value=1)
-
-    if st.button("Update Stock"):
-
-        mask = (
-            (inventory["Product"] == product) &
-            (inventory["Details"] == details) &
-            (inventory["Size"] == size) &
-            (inventory["Colours"] == colour)
-        )
-
-        inventory.loc[mask,"Quantity"] += qty
+        inventory.loc[inventory["SKU"]==sku,"Quantity"] += qty
 
         save_to_google()
 
-        st.success("Stock Updated Successfully")
+        st.success("Stock Updated")
 
 # ---------------- RECORD SALE ----------------
 
@@ -209,37 +202,52 @@ elif menu == "Record Sale":
 
     st.subheader("Record Sale")
 
-    product = st.selectbox("Product", sorted(inventory["Product"].unique()))
+    sku = st.selectbox("Select SKU", inventory["SKU"])
 
-    product_df = inventory[inventory["Product"] == product]
+    product_row = inventory[inventory["SKU"]==sku].iloc[0]
 
-    details = st.selectbox("Details", sorted(product_df["Details"].unique()))
+    st.write(product_row[["Product","Details","Size","Colours"]])
 
-    details_df = product_df[product_df["Details"] == details]
+    qty = st.number_input("Quantity Sold", min_value=1)
 
-    size = st.selectbox("Size", sorted(details_df["Size"].unique()))
+    real_sale = st.number_input("Real Sale Price", min_value=0.0)
 
-    size_df = details_df[details_df["Size"] == size]
+    customer = st.text_input("Customer Name")
 
-    colour = st.selectbox("Colour", sorted(size_df["Colours"].unique()))
+    if st.button("Save Sale"):
 
-    qty = st.number_input("Enter Quantity For Sale", min_value=1)
+        stock = int(product_row["Quantity"])
 
-    if st.button("Check Product"):
+        if qty > stock:
+            st.error("Not enough stock")
+            st.stop()
 
-        product_data = size_df[size_df["Colours"] == colour]
+        cost = float(product_row["Cost Price"])
 
-        if product_data.empty:
-            st.error("Product not found")
-        else:
+        remaining = stock - qty
 
-            cost = float(product_data["Cost Price"].values[0])
-            sp = float(product_data["Sale Price"].values[0])
-            stock = int(product_data["Quantity"].values[0])
+        profit = (real_sale - cost) * qty
 
-            st.metric("Available Stock", stock)
-            st.metric("Cost Price", cost)
-            st.metric("Sale Price", sp)
+        new_sale = pd.DataFrame({
+
+            "Date":[date.today()],
+            "Customer Name":[customer],
+            "SKU":[sku],
+            "Product":[product_row["Product"]],
+            "Quantity Sold":[qty],
+            "Cost Price":[cost],
+            "Real Sale Price":[real_sale],
+            "Profit":[profit]
+
+        })
+
+        sales = pd.concat([sales,new_sale],ignore_index=True)
+
+        inventory.loc[inventory["SKU"]==sku,"Quantity"] = remaining
+
+        save_to_google()
+
+        st.success("Sale Recorded")
 
 # ---------------- EDIT SALE ----------------
 
@@ -251,7 +259,10 @@ elif menu == "Edit Sale":
 
     row = st.selectbox("Select Row", sales.index)
 
-    new_customer = st.text_input("Customer", sales.loc[row,"Customer Name"])
+    new_customer = st.text_input(
+        "Customer",
+        sales.loc[row,"Customer Name"]
+    )
 
     if st.button("Update"):
 
@@ -271,17 +282,20 @@ elif menu == "Edit Inventory":
 
     row = st.selectbox("Select Row", inventory.index)
 
-    new_product = st.text_input("Product", inventory.loc[row,"Product"])
+    new_price = st.number_input(
+        "Sale Price",
+        value=float(inventory.loc[row,"Sale Price"])
+    )
 
-    if st.button("Update Inventory"):
+    if st.button("Update"):
 
-        inventory.loc[row,"Product"] = new_product
+        inventory.loc[row,"Sale Price"] = new_price
 
         save_to_google()
 
         st.success("Inventory Updated")
 
-# ---------------- SEARCH PRODUCT ----------------
+# ---------------- SEARCH ----------------
 
 elif menu == "Search Product":
 
@@ -290,7 +304,7 @@ elif menu == "Search Product":
     if search:
 
         result = inventory[
-            inventory["Product"].str.contains(search, case=False)
+            inventory["Product"].str.contains(search,case=False)
         ]
 
         st.dataframe(result)
@@ -315,14 +329,14 @@ elif menu == "Sales Report":
 
         st.metric("Total Profit", int(report["Profit"].sum()))
 
-# ---------------- DOWNLOAD REPORTS ----------------
+# ---------------- DOWNLOAD REPORT ----------------
 
 elif menu == "Download Reports":
 
     inv_csv = inventory.to_csv(index=False).encode("utf-8")
 
     st.download_button(
-        "Download Inventory Report",
+        "Download Inventory",
         inv_csv,
         "inventory_report.csv"
     )
@@ -330,7 +344,7 @@ elif menu == "Download Reports":
     sales_csv = sales.to_csv(index=False).encode("utf-8")
 
     st.download_button(
-        "Download Sales Report",
+        "Download Sales",
         sales_csv,
         "sales_report.csv"
     )
