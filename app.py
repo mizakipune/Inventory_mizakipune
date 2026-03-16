@@ -409,23 +409,20 @@ elif menu == "Sales Report":
         st.warning("No sales data available")
         st.stop()
 
-    # Create a clean date column
-    sales["Date_clean"] = pd.to_datetime(
-        sales["Date"],
-        errors="coerce"
-    ).dt.strftime("%Y-%m-%d")
+    # Convert sheet dates to string format
+    sales["Date"] = sales["Date"].astype(str).str.strip()
 
-    # Convert user input to same format
+    # Convert Streamlit dates to same format
     start = st.date_input("Start Date")
     end = st.date_input("End Date")
 
-    start_date = pd.to_datetime(start).strftime("%Y-%m-%d")
-    end_date = pd.to_datetime(end).strftime("%Y-%m-%d")
+    start_str = start.strftime("%Y-%m-%d")
+    end_str = end.strftime("%Y-%m-%d")
 
-    # Filter using clean column
+    # Filter
     report = sales[
-        (sales["Date_clean"] >= start_date) &
-        (sales["Date_clean"] <= end_date)
+        (sales["Date"] >= start_str) &
+        (sales["Date"] <= end_str)
     ]
 
     if report.empty:
