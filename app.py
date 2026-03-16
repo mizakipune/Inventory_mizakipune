@@ -184,17 +184,51 @@ elif menu == "Update Stock":
 
     st.subheader("Update Stock")
 
-    sku = st.selectbox("Select SKU", inventory["SKU"])
+    product = st.selectbox(
+        "Product",
+        sorted(inventory["Product"].unique())
+    )
+
+    product_df = inventory[inventory["Product"] == product]
+
+    details = st.selectbox(
+        "Details",
+        sorted(product_df["Details"].unique())
+    )
+
+    details_df = product_df[product_df["Details"] == details]
+
+    size = st.selectbox(
+        "Size",
+        sorted(details_df["Size"].unique())
+    )
+
+    size_df = details_df[details_df["Size"] == size]
+
+    colour = st.selectbox(
+        "Colour",
+        sorted(size_df["Colours"].unique())
+    )
 
     qty = st.number_input("Add Quantity", min_value=1)
 
-    if st.button("Update"):
+    if st.button("Update Stock"):
 
-        inventory.loc[inventory["SKU"]==sku,"Quantity"] += qty
+        product_row = size_df[size_df["Colours"] == colour]
 
-        save_to_google()
+        if product_row.empty:
 
-        st.success("Stock Updated")
+            st.error("Product not found")
+
+        else:
+
+            sku = product_row["SKU"].values[0]
+
+            inventory.loc[inventory["SKU"] == sku, "Quantity"] += qty
+
+            save_to_google()
+
+            st.success(f"Stock Updated for SKU {sku}")
 
 # ---------------- RECORD SALE ----------------
 
