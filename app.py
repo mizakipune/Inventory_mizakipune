@@ -403,22 +403,46 @@ elif menu == "Search Product":
 
 elif menu == "Sales Report":
 
-    if not sales.empty:
+    st.subheader("Sales Report")
 
-        sales["Date"] = pd.to_datetime(sales["Date"])
+    if sales.empty:
+        st.warning("No sales data available")
+        st.stop()
 
-        start = st.date_input("Start Date")
-        end = st.date_input("End Date")
+    # SAFE DATE CONVERSION
+    sales["Date"] = pd.to_datetime(
+        sales["Date"],
+        errors="coerce",
+        dayfirst=True
+    )
 
-        report = sales[
-            (sales["Date"]>=pd.to_datetime(start)) &
-            (sales["Date"]<=pd.to_datetime(end))
-        ]
+    # Remove invalid dates
+    sales = sales.dropna(subset=["Date"])
+
+    start = st.date_input("Start Date")
+    end = st.date_input("End Date")
+
+    start = pd.to_datetime(start)
+    end = pd.to_datetime(end)
+
+    report = sales[
+        (sales["Date"] >= start) &
+        (sales["Date"] <= end)
+    ]
+
+    if report.empty:
+        st.info("No sales found for selected dates")
+    else:
 
         st.dataframe(report)
 
-        st.metric("Total Profit", int(report["Profit"].sum()))
+        total_profit = report["Profit"].sum()
+        total_sales = report["Total Sale Price"].sum()
 
+        col1, col2 = st.columns(2)
+
+        col1.metric("Total Profit", int(total_profit))
+        col2.metric("Total Sales", int(total_sales))
 # ---------------- DOWNLOAD REPORT ----------------
 
 elif menu == "Download Reports":
